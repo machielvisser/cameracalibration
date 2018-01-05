@@ -23,11 +23,6 @@ using ImageSize = System.Drawing.Size;
 
 namespace CameraCalibrationTool
 {
-    /**
-     * ToDo:
-     * * Get calibration error to zero
-     * * Load calibration and multiply normalized point with inverse of camera matrix
-     **/
     public class CalibrationToolViewModel : INotifyPropertyChanged
     {
         public event PropertyChangedEventHandler PropertyChanged;
@@ -80,8 +75,8 @@ namespace CameraCalibrationTool
             }
         }
 
-        private int _calibrationError;
-        public int CalibrationError
+        private double _calibrationError;
+        public double CalibrationError
         {
             get
             {
@@ -101,6 +96,10 @@ namespace CameraCalibrationTool
 
         public CalibrationToolViewModel()
         {
+            _capture = new Capture(0);
+            _capture.ImageGrabbed += ImageGrabbed;
+            _capture.Start();
+
             var realCorners = Observable
                 .Range(0, _nCornersVertical)
                 .SelectMany(y => Observable
@@ -110,10 +109,6 @@ namespace CameraCalibrationTool
                 .Aggregate((x, y) => x.Concat(y).ToArray())
                 .GetAwaiter();
 
-            _capture = new Capture(0);
-            _capture.ImageGrabbed += ImageGrabbed;
-            _capture.Start();
-
             var imageSize = _images
                 .Select(i => i.Copy())
                 .Select(i => i.Size)
@@ -122,11 +117,12 @@ namespace CameraCalibrationTool
 
             var patterns = _images
                 .Select(i => i.Copy())
+                .Sample(TimeSpan.FromMilliseconds(250))
                 .Select(FindPattern)
                 .Publish();
             
             patterns
-                .Subscribe(i => Application.Current.Dispatcher.Invoke(() => Step1 = ImageToImageSource(i.Image)));
+                .Subscribe(i => Application.Current?.Dispatcher.Invoke(() => Step1 = ImageToImageSource(i.Image)));
 
             patterns
                 .Subscribe(p => PatternQuality = 100 * (int)(p.Corners.Size / (float)(_nCornersHorizontal * _nCornersVertical)));
@@ -144,7 +140,7 @@ namespace CameraCalibrationTool
                 .Publish();
 
             calibrations
-                .Subscribe(c => CalibrationError = (int)c.Error);
+                .Subscribe(c => CalibrationError = c.Error);
 
             _saveTriggers
                 .WithLatestFrom(calibrations, (f, c) => new { File = f, Calibration = c })
@@ -159,11 +155,11 @@ namespace CameraCalibrationTool
                     CvInvoke.Undistort(d.Image, output, d.Calibration.CameraMatrix, d.Calibration.DistortionCoefficients);
                     return output;
                 })
-                .Subscribe(i => Application.Current.Dispatcher.Invoke(() => Step2 = ImageToImageSource(i)));
+                .Subscribe(i => Application.Current?.Dispatcher.Invoke(() => Step2 = ImageToImageSource(i)));
 
-            calibrations
-                .Select(c => Angle(new PointF(640, 240), c))
-                .Subscribe(a => Debug.WriteLine(a));
+            //calibrations
+            //    .Select(c => Angle(new PointF(640, 240), c))
+            //    .Subscribe(a => Debug.WriteLine(a));
             
             patterns.Connect();
             calibrations.Connect();
@@ -244,10 +240,10 @@ namespace CameraCalibrationTool
 
         private void ImageGrabbed(object sender, EventArgs e)
         {
-            IOutputArray image = new Image<Bgr, byte>(_capture.Width, _capture.Height);
+            var image = new Image<Bgr, byte>(_capture.Width, _capture.Height);
             _capture.Retrieve(image);
-            _images.OnNext((Image<Bgr, byte>)image);
-            ((Image<Bgr, byte>)image).Dispose();
+            _images.OnNext(image);
+            image.Dispose();
         }
 
         private Pattern FindPattern(Image<Bgr, byte> image)
