@@ -2,6 +2,7 @@
 using Emgu.CV.CvEnum;
 using Emgu.CV.Structure;
 using Emgu.CV.Util;
+using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -36,8 +37,6 @@ namespace CameraCalibrationTool
         private const float _squareSize = 0.5F;
         
         private const int _sampleRate = 2;
-
-        private string _calibrationFile;
 
         private ImageSource _step1;
         public ImageSource Step1
@@ -97,14 +96,11 @@ namespace CameraCalibrationTool
 
         private Capture _capture;
         private ISubject<Image<Bgr, byte>> _images = new Subject<Image<Bgr, byte>>();
-        private ISubject<int> _saveTriggers = new Subject<int>();
+        private ISubject<string> _saveTriggers = new Subject<string>();
+        private ISubject<Calibration> _calibrations = new Subject<Calibration>();
 
         public CalibrationToolViewModel()
         {
-            _calibrationFile = ConfigurationManager.AppSettings["CalibrationFile"];
-
-            var initialCalibration = File.Exists(_calibrationFile) ? ReadCalibration(_calibrationFile) : Enumerable.Empty<Calibration>();
-
             var realCorners = Observable
                 .Range(0, _nCornersVertical)
                 .SelectMany(y => Observable
@@ -123,10 +119,6 @@ namespace CameraCalibrationTool
                 .Select(i => i.Size)
                 .Take(1)
                 .GetAwaiter();
-
-            //_images
-            //    .Select(i => i.Copy())
-            //    .Subscribe(i => Application.Current.Dispatcher.Invoke(() => Step1 = ImageToImageSource(i)));
 
             var patterns = _images
                 .Select(i => i.Copy())
@@ -148,16 +140,15 @@ namespace CameraCalibrationTool
                     .Concat(new[] { p })
                     .ToArray())
                 .Select(s => Calibrate(s, realCorners, imageSize.Wait()))
-                //.Do(c => Debug.WriteLine(c.Error))
-                .StartWith(initialCalibration)
+                .Merge(_calibrations)
                 .Publish();
 
             calibrations
                 .Subscribe(c => CalibrationError = (int)c.Error);
 
             _saveTriggers
-                .WithLatestFrom(calibrations, (t, c) => c)
-                .Subscribe(c => SaveCalibration(c.CameraMatrix, c.DistortionCoefficients));
+                .WithLatestFrom(calibrations, (f, c) => new { File = f, Calibration = c })
+                .Subscribe(t => SaveCalibration(t.Calibration.CameraMatrix, t.Calibration.DistortionCoefficients, t.File));
 
             _images
                 .Select(i => i.Copy())
@@ -183,26 +174,38 @@ namespace CameraCalibrationTool
             _capture.Stop();
         }
 
-        public void SaveCalibration()
+        public void SaveCalibration(string file)
         {
-            _saveTriggers.OnNext(0);
+            _saveTriggers.OnNext(file);
         }
 
-        private void SaveCalibration(Mat cameraMatrix, Mat distCoeffs)
+        public void OpenCalibration(string file)
         {
-            var fs = new FileStorage(_calibrationFile, FileStorage.Mode.Write);
+            try
+            {
+                _calibrations.OnNext(ReadCalibration(file));
+            }
+            catch (Exception e)
+            {
+                MessageBox.Show(e.Message);
+            }
+        }
+
+        private void SaveCalibration(Mat cameraMatrix, Mat distCoeffs, string file)
+        {
+            var fs = new FileStorage(file, FileStorage.Mode.Write);
             fs.Write(cameraMatrix, "cameraMatrix");
             fs.Write(distCoeffs, "distCoeffs");
         }
 
-        private IEnumerable<Calibration> ReadCalibration(string file)
+        private Calibration ReadCalibration(string file)
         {
             var fs = new FileStorage(file, FileStorage.Mode.Read);
             var calibration = new Calibration();
             fs.GetNode("cameraMatrix").ReadMat(calibration.CameraMatrix);
             fs.GetNode("distCoeffs").ReadMat(calibration.DistortionCoefficients);
 
-            yield return calibration;
+            return calibration;
         }
 
         private double Angle(PointF point, Calibration calibration)
