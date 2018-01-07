@@ -90,6 +90,8 @@ namespace CameraCalibrationTool
         }
 
         private Capture _capture;
+        private CascadeClassifier _haarCascade;
+
         private ISubject<Image<Bgr, byte>> _images = new Subject<Image<Bgr, byte>>();
         private ISubject<string> _saveTriggers = new Subject<string>();
         private ISubject<Calibration> _calibrations = new Subject<Calibration>();
@@ -99,6 +101,8 @@ namespace CameraCalibrationTool
             _capture = new Capture(0);
             _capture.ImageGrabbed += ImageGrabbed;
             _capture.Start();
+
+            _haarCascade = new CascadeClassifier("haarcascade_frontalface_default.xml");
 
             var realCorners = Observable
                 .Range(0, _nCornersVertical)
@@ -146,21 +150,26 @@ namespace CameraCalibrationTool
                 .WithLatestFrom(calibrations, (f, c) => new { File = f, Calibration = c })
                 .Subscribe(t => SaveCalibration(t.Calibration.CameraMatrix, t.Calibration.DistortionCoefficients, t.File));
 
-            _images
+            //_images
+            //    .Select(i => i.Copy())
+            //    .WithLatestFrom(calibrations, (i, c) => new { Image = i, Calibration = c })
+            //    .Select(d =>
+            //    {
+            //        var output = d.Image.Clone();
+            //        CvInvoke.Undistort(d.Image, output, d.Calibration.CameraMatrix, d.Calibration.DistortionCoefficients);
+            //        return output;
+            //    })
+            //    .Subscribe(i => Application.Current?.Dispatcher.Invoke(() => Step2 = ImageToImageSource(i)));
+
+            var faces = _images
                 .Select(i => i.Copy())
-                .WithLatestFrom(calibrations, (i, c) => new { Image = i, Calibration = c })
-                .Select(d =>
-                {
-                    var output = d.Image.Clone();
-                    CvInvoke.Undistort(d.Image, output, d.Calibration.CameraMatrix, d.Calibration.DistortionCoefficients);
-                    return output;
-                })
+                .Select(i => DetectFaces(_haarCascade, i))
                 .Subscribe(i => Application.Current?.Dispatcher.Invoke(() => Step2 = ImageToImageSource(i)));
 
             //calibrations
             //    .Select(c => Angle(new PointF(640, 240), c))
             //    .Subscribe(a => Debug.WriteLine(a));
-            
+
             patterns.Connect();
             calibrations.Connect();
         }
@@ -185,6 +194,16 @@ namespace CameraCalibrationTool
             {
                 MessageBox.Show(e.Message);
             }
+        }
+
+        private Image<Bgr, byte> DetectFaces(CascadeClassifier classifier, Image<Bgr, byte> image)
+        {
+            classifier
+                .DetectMultiScale(image, 1.3, 5, new ImageSize(150, 150))
+                .ToList()
+                .ForEach(f => image.Draw(f, new Bgr(System.Drawing.Color.Red), 2));
+
+            return image;
         }
 
         private void SaveCalibration(Mat cameraMatrix, Mat distCoeffs, string file)
@@ -282,6 +301,12 @@ namespace CameraCalibrationTool
                 return bitmapimage;
             }
         }
+    }
+
+    class Detection
+    {
+        public Rectangle Position;
+        public Image<Bgr, byte> Image;
     }
 
     class Pattern
