@@ -1,17 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using Microsoft.Win32;
 using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
 
 namespace CameraCalibrationTool
 {
@@ -29,9 +17,18 @@ namespace CameraCalibrationTool
             DataContext = _viewModel = new CalibrationToolViewModel();
         }
 
-        private void Button_Click(object sender, RoutedEventArgs e)
+        private void SaveButtonClick(object sender, RoutedEventArgs e)
         {
-            _viewModel.SaveCalibration();
+            var dialog = new SaveFileDialog();
+            if (dialog.ShowDialog() ?? false)
+                _viewModel.SaveCalibration(dialog.FileName);
+        }
+
+        private void OpenButtonClick(object sender, RoutedEventArgs e)
+        {
+            var dialog = new OpenFileDialog();
+            if (dialog.ShowDialog() ?? false)
+                _viewModel.OpenCalibration(dialog.FileName);
         }
     }
 }
