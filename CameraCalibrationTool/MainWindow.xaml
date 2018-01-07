@@ -27,9 +27,11 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="25"></RowDefinition>
                 <RowDefinition Height="25"></RowDefinition>
+                <RowDefinition Height="25"></RowDefinition>
             </Grid.RowDefinitions>
             <Button Click="OpenButtonClick" Grid.Row="0" Height="20" VerticalAlignment="Top">Open</Button>
             <Button Click="SaveButtonClick" Grid.Row="1" Height="20" VerticalAlignment="Top">Save</Button>
+            <TextBlock Grid.Row="2" Text="{Binding FaceAngle}"/>
         </Grid>
         <ProgressBar Minimum="0" Maximum="100" Value="{Binding PatternQuality}" Grid.Column="0" Grid.Row="1" />
         <ProgressBar Minimum="0" Maximum="1" Value="{Binding CalibrationError}" Grid.Column="1" Grid.Row="1" Foreground="Red" />

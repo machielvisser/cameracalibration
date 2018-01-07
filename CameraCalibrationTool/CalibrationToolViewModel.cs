@@ -89,6 +89,20 @@ namespace CameraCalibrationTool
             }
         }
 
+        private double _faceAngle;
+        public double FaceAngle
+        {
+            get
+            {
+                return _faceAngle;
+            }
+            set
+            {
+                _faceAngle = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(FaceAngle)));
+            }
+        }
+
         private Capture _capture;
         private CascadeClassifier _haarCascade;
 
@@ -150,25 +164,23 @@ namespace CameraCalibrationTool
                 .WithLatestFrom(calibrations, (f, c) => new { File = f, Calibration = c })
                 .Subscribe(t => SaveCalibration(t.Calibration.CameraMatrix, t.Calibration.DistortionCoefficients, t.File));
 
-            //_images
-            //    .Select(i => i.Copy())
-            //    .WithLatestFrom(calibrations, (i, c) => new { Image = i, Calibration = c })
-            //    .Select(d =>
-            //    {
-            //        var output = d.Image.Clone();
-            //        CvInvoke.Undistort(d.Image, output, d.Calibration.CameraMatrix, d.Calibration.DistortionCoefficients);
-            //        return output;
-            //    })
-            //    .Subscribe(i => Application.Current?.Dispatcher.Invoke(() => Step2 = ImageToImageSource(i)));
+            _images
+                .Select(i => i.Copy())
+                .WithLatestFrom(calibrations, (i, c) => new { Image = i, Calibration = c })
+                .Select(d =>
+                {
+                    var output = d.Image.Clone();
+                    CvInvoke.Undistort(d.Image, output, d.Calibration.CameraMatrix, d.Calibration.DistortionCoefficients);
+                    return output;
+                })
+                .Subscribe(i => Application.Current?.Dispatcher.Invoke(() => Step2 = ImageToImageSource(i)));
 
             var faces = _images
                 .Select(i => i.Copy())
-                .Select(i => DetectFaces(_haarCascade, i))
-                .Subscribe(i => Application.Current?.Dispatcher.Invoke(() => Step2 = ImageToImageSource(i)));
-
-            //calibrations
-            //    .Select(c => Angle(new PointF(640, 240), c))
-            //    .Subscribe(a => Debug.WriteLine(a));
+                .SelectMany(i => _haarCascade.DetectMultiScale(i, 1.3, 5, new ImageSize(150, 150)))
+                .WithLatestFrom(calibrations, (r, c) => new { Rectangle = r, Calibration = c })
+                .Select(x => Angle(new PointF(x.Rectangle.X + x.Rectangle.Width / 2, 240), x.Calibration))
+                .Subscribe(a => Application.Current?.Dispatcher.Invoke(() => FaceAngle = a));
 
             patterns.Connect();
             calibrations.Connect();
@@ -194,16 +206,6 @@ namespace CameraCalibrationTool
             {
                 MessageBox.Show(e.Message);
             }
-        }
-
-        private Image<Bgr, byte> DetectFaces(CascadeClassifier classifier, Image<Bgr, byte> image)
-        {
-            classifier
-                .DetectMultiScale(image, 1.3, 5, new ImageSize(150, 150))
-                .ToList()
-                .ForEach(f => image.Draw(f, new Bgr(System.Drawing.Color.Red), 2));
-
-            return image;
         }
 
         private void SaveCalibration(Mat cameraMatrix, Mat distCoeffs, string file)
@@ -233,14 +235,8 @@ namespace CameraCalibrationTool
             CvInvoke.ConvertPointsToHomogeneous(undistorted, homogeneous);
 
             // Calculate angle
-            var angle = Math.Acos(1 / homogeneous[0].Norm) * 180 / Math.PI;
-            return angle;
-
-            // Calculate area in camera coordinates
-
-            // Calculate area in world coordinates
-
-            // Look for possible matches in tracking
+            var sign = homogeneous[0].X / Math.Abs(homogeneous[0].X);
+            return sign * Math.Acos(1 / homogeneous[0].Norm) * 180 / Math.PI;
         }
 
         private Calibration Calibrate(PointF[][] patterns, IObservable<MCvPoint3D32f[]> realCorners, ImageSize size)
