@@ -1,24 +1,17 @@
-﻿using Emgu.CV;
+﻿using DataModel;
+using Emgu.CV;
 using Emgu.CV.CvEnum;
 using Emgu.CV.Structure;
 using Emgu.CV.Util;
-using Microsoft.Win32;
+using Shared;
 using System;
-using System.Collections.Generic;
 using System.ComponentModel;
-using System.Configuration;
-using System.Diagnostics;
 using System.Drawing;
-using System.Drawing.Imaging;
-using System.IO;
 using System.Linq;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media;
-using System.Windows.Media.Imaging;
 using ImageSize = System.Drawing.Size;
 
 namespace CameraCalibrationTool
@@ -104,7 +97,6 @@ namespace CameraCalibrationTool
         }
 
         private Capture _capture;
-        private CascadeClassifier _haarCascade;
 
         private ISubject<Image<Bgr, byte>> _images = new Subject<Image<Bgr, byte>>();
         private ISubject<string> _saveTriggers = new Subject<string>();
@@ -115,8 +107,6 @@ namespace CameraCalibrationTool
             _capture = new Capture(0);
             _capture.ImageGrabbed += ImageGrabbed;
             _capture.Start();
-
-            _haarCascade = new CascadeClassifier("haarcascade_frontalface_default.xml");
 
             var realCorners = Observable
                 .Range(0, _nCornersVertical)
@@ -140,7 +130,7 @@ namespace CameraCalibrationTool
                 .Publish();
             
             patterns
-                .Subscribe(i => Application.Current?.Dispatcher.Invoke(() => Step1 = ImageToImageSource(i.Image)));
+                .Subscribe(i => Application.Current?.Dispatcher.Invoke(() => Step1 = i.Image.ToImageSource()));
 
             patterns
                 .Subscribe(p => PatternQuality = 100 * (int)(p.Corners.Size / (float)(_nCornersHorizontal * _nCornersVertical)));
@@ -173,14 +163,7 @@ namespace CameraCalibrationTool
                     CvInvoke.Undistort(d.Image, output, d.Calibration.CameraMatrix, d.Calibration.DistortionCoefficients);
                     return output;
                 })
-                .Subscribe(i => Application.Current?.Dispatcher.Invoke(() => Step2 = ImageToImageSource(i)));
-
-            var faces = _images
-                .Select(i => i.Copy())
-                .SelectMany(i => _haarCascade.DetectMultiScale(i, 1.3, 5, new ImageSize(150, 150)))
-                .WithLatestFrom(calibrations, (r, c) => new { Rectangle = r, Calibration = c })
-                .Select(x => Angle(new PointF(x.Rectangle.X + x.Rectangle.Width / 2, 240), x.Calibration))
-                .Subscribe(a => Application.Current?.Dispatcher.Invoke(() => FaceAngle = a));
+                .Subscribe(i => Application.Current?.Dispatcher.Invoke(() => Step2 = i.ToImageSource()));
 
             patterns.Connect();
             calibrations.Connect();
@@ -278,63 +261,6 @@ namespace CameraCalibrationTool
                 Corners = corners,
                 Image = image
             };
-        }
-
-        private BitmapImage ImageToImageSource(Image<Bgr, byte> image)
-        {
-            var bitmap = image.Bitmap;
-
-            using (MemoryStream memory = new MemoryStream())
-            {
-                bitmap.Save(memory, ImageFormat.Bmp);
-                memory.Position = 0;
-                BitmapImage bitmapimage = new BitmapImage();
-                bitmapimage.BeginInit();
-                bitmapimage.StreamSource = memory;
-                bitmapimage.CacheOption = BitmapCacheOption.OnLoad;
-                bitmapimage.EndInit();
-
-                return bitmapimage;
-            }
-        }
-    }
-
-    class Detection
-    {
-        public Rectangle Position;
-        public Image<Bgr, byte> Image;
-    }
-
-    class Pattern
-    {
-        public VectorOfPointF Corners;
-        public Image<Bgr, byte> Image;
-    }
-
-    class Calibration
-    {
-        public Mat CameraMatrix;
-        public Mat DistortionCoefficients;
-
-        private Mat _inverseCameraMatrix;
-        public Mat InverseCameraMatrix
-        {
-            get
-            {
-                if (_inverseCameraMatrix == null)
-                {
-                    _inverseCameraMatrix = new Mat(3, 3, DepthType.Cv64F, 1);
-                    CvInvoke.Invert(CameraMatrix, _inverseCameraMatrix, DecompMethod.LU);
-                }
-                return _inverseCameraMatrix;
-            }
-        }
-        public double Error;
-        
-        public Calibration()
-        {
-            CameraMatrix = new Mat(3, 3, DepthType.Cv64F, 1);
-            DistortionCoefficients = new Mat(8, 1, DepthType.Cv64F, 1);
         }
     }
 }
