@@ -1,5 +1,6 @@
 ﻿using DataModel;
 using Emgu.CV;
+using Emgu.CV.CvEnum;
 using Emgu.CV.Structure;
 using Emgu.CV.Tracking;
 using Shared;
@@ -16,7 +17,6 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media;
-using ImageSize = System.Drawing.Size;
 
 namespace FaceTracking
 {
@@ -26,23 +26,20 @@ namespace FaceTracking
         public event PropertyChangedEventHandler PropertyChanged;
 
         private VideoCapture _capture;
-        private CascadeClassifier _haarCascade;
-
-        private float _frameInterval = 1000 / float.Parse(ConfigurationManager.AppSettings["FrameRate"]);
-        private float _scaleFactor = float.Parse(ConfigurationManager.AppSettings["ScaleFactor"]);
-        private int _minNeighbours = int.Parse(ConfigurationManager.AppSettings["MinNeighbours"]);
-        private int _minFaceSize = int.Parse(ConfigurationManager.AppSettings["MinFaceSize"]);
 
         public ImageSource Image { get; set; }
         public ImageSource Face { get; set; }
 
         public FaceTrackingViewModel()
         {
+            var frameInterval = 1000 / float.Parse(ConfigurationManager.AppSettings["FrameRate"]);
+
             _capture = new VideoCapture(0);
-            _haarCascade = new CascadeClassifier(ConfigurationManager.AppSettings["Model"]);
+
+            var size = new Rectangle(0, 0, _capture.Width, _capture.Height);
 
             Observable
-                .Interval(TimeSpan.FromMilliseconds(_frameInterval))
+                .Interval(TimeSpan.FromMilliseconds(frameInterval))
                 .Subscribe(_ => {
                     PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Image)));
                     PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Face)));
@@ -62,41 +59,8 @@ namespace FaceTracking
 
             var detections = frames
                 .Select(f => f.Image.Copy())
-                .Scan(new List<TrackState>(), (ts, f) =>
-                {
-                    // Update current tracked faces
-                    var updated = ts
-                        .Select(s =>
-                        {
-                            var result = s.Tracker.Update(f.Mat, out Rectangle bbox);
-                            bbox.Intersect(f.ROI);
-                            s.Location = bbox;
-
-                            if (bbox.IsEmpty)
-                            {
-                                s.Tracker.Dispose();
-                                return null;
-                            }
-                            else
-                                return s;
-                        })
-                        .Where(s => s != null)
-                        .ToList();
-
-                    // Look for new faces
-                    updated.AddRange(_haarCascade
-                        .DetectMultiScale(f.Convert<Gray, byte>().SmoothMedian(9), _scaleFactor, _minNeighbours, new ImageSize(_minFaceSize, _minFaceSize))
-                        .Where(d => !updated.Any(s => s.Location.IntersectsWith(d)))
-                        .Select(d => {
-                            var trackState = new TrackState { Tracker = new TrackerKCF(), Location = d };
-                            trackState.Tracker.Init(f.Mat, d);
-                            return trackState;
-                        })
-                        .ToList());
-
-                    return updated;
-                })
-                .Select(ts => ts.Select(s => s.Location))
+                .Scan(new FaceTracker(), (t, f) => t.Update(f))
+                .Select(t => t.Faces)
                 .Publish();
 
             detections
