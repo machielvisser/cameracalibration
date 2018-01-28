@@ -16,4 +16,4 @@ Calibration is done using a 10 by 7 chessboard pattern.
 With the calibrations, and faces in the image, the angle is calculated between the camera direction and the face on the horizontal plane.
 
 ## Face tracking
-EmguCV face tracking experiment
+EmguCV face tracking experiment using the TrackerKCF
