@@ -96,7 +96,7 @@ namespace CameraCalibrationTool
             }
         }
 
-        private Capture _capture;
+        private VideoCapture _capture;
 
         private ISubject<Image<Bgr, byte>> _images = new Subject<Image<Bgr, byte>>();
         private ISubject<string> _saveTriggers = new Subject<string>();
@@ -104,7 +104,7 @@ namespace CameraCalibrationTool
 
         public CalibrationToolViewModel()
         {
-            _capture = new Capture(0);
+            _capture = new VideoCapture(0);
             _capture.ImageGrabbed += ImageGrabbed;
             _capture.Start();
 

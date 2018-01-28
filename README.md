@@ -1,6 +1,12 @@
 # EmguCV Experiments
 This repository contains several tools and experiments related to using camera's for face tracking purposes using EmguCV
 
+The following frameworks were used in this solution:
+* C#
+* Emgu
+* Reactive
+* WPF
+
 ## Camera Calibration
 EmguCV camera calibration with user interface
 
@@ -11,10 +17,3 @@ With the calibrations, and faces in the image, the angle is calculated between t
 
 ## Face tracking
 EmguCV face tracking experiment
-
-## Frameworks
-The following frameworks were used in this solution:
-* C#
-* Emgu
-* Reactive
-* WPF
