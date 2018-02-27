@@ -36,7 +36,6 @@ namespace CameraCalibrationTool
             set
             {
                 _step1 = value;
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Step1)));
             }
         }
 
@@ -50,7 +49,6 @@ namespace CameraCalibrationTool
             set
             {
                 _step2 = value;
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Step2)));
             }
         }
 
@@ -104,9 +102,20 @@ namespace CameraCalibrationTool
 
         public CalibrationToolViewModel()
         {
-            _capture = new VideoCapture(0);
-            _capture.ImageGrabbed += ImageGrabbed;
+            _capture = new VideoCapture("rtsp://admin:admin@10.15.8.67:554/media/video1");
+            //_capture = new VideoCapture(0);
             _capture.Start();
+
+            Observable
+                .Interval(TimeSpan.FromMilliseconds(100))
+                .Subscribe(_ => {
+                    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Step1)));
+                    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Step2)));
+                });
+
+            Observable
+                .Interval(TimeSpan.FromMilliseconds(50))
+                .Subscribe(GrabImage);
 
             var realCorners = Observable
                 .Range(0, _nCornersVertical)
@@ -128,7 +137,7 @@ namespace CameraCalibrationTool
                 .Sample(TimeSpan.FromMilliseconds(250))
                 .Select(FindPattern)
                 .Publish();
-            
+
             patterns
                 .Subscribe(i => Application.Current?.Dispatcher.Invoke(() => Step1 = i.Image.ToImageSource()));
 
@@ -152,7 +161,7 @@ namespace CameraCalibrationTool
 
             _saveTriggers
                 .WithLatestFrom(calibrations, (f, c) => new { File = f, Calibration = c })
-                .Subscribe(t => SaveCalibration(t.Calibration.CameraMatrix, t.Calibration.DistortionCoefficients, t.File));
+                .Subscribe(t => SaveCalibration(t.Calibration, t.File));
 
             _images
                 .Select(i => i.Copy())
@@ -191,11 +200,14 @@ namespace CameraCalibrationTool
             }
         }
 
-        private void SaveCalibration(Mat cameraMatrix, Mat distCoeffs, string file)
+        private void SaveCalibration(Calibration c, string file)
         {
             var fs = new FileStorage(file, FileStorage.Mode.Write);
-            fs.Write(cameraMatrix, "cameraMatrix");
-            fs.Write(distCoeffs, "distCoeffs");
+            fs.Write(c.CameraMatrix, "cameraMatrix");
+            fs.Write(c.DistortionCoefficients, "distCoeffs");
+            
+            fs.Write(c.RotationVectors, $"rotationVector");
+            fs.Write(c.TranslationVectors, $"translationVector");
         }
 
         private Calibration ReadCalibration(string file)
@@ -204,6 +216,8 @@ namespace CameraCalibrationTool
             var calibration = new Calibration();
             fs.GetNode("cameraMatrix").ReadMat(calibration.CameraMatrix);
             fs.GetNode("distCoeffs").ReadMat(calibration.DistortionCoefficients);
+            fs.GetNode("translationVector").ReadMat(calibration.TranslationVectors);
+            fs.GetNode("rotationVector").ReadMat(calibration.RotationVectors);
 
             return calibration;
         }
@@ -230,13 +244,13 @@ namespace CameraCalibrationTool
                 .Wait();
 
             var c = new Calibration();
-            Mat[] rvecs, tvecs;
+            Mat[] tvecs, rvecs;
             c.Error = CvInvoke.CalibrateCamera(objectPoints, patterns, size, c.CameraMatrix, c.DistortionCoefficients, CalibType.RationalModel, new MCvTermCriteria(30, 0.1), out rvecs, out tvecs);
-
+            CvInvoke.SolvePnP(objectPoints.SelectMany(i => i).ToArray(), patterns.SelectMany(i => i).ToArray(), c.CameraMatrix, c.DistortionCoefficients, c.RotationVectors, c.TranslationVectors);
             return c;
         }
 
-        private void ImageGrabbed(object sender, EventArgs e)
+        private void GrabImage(long interval)
         {
             var image = new Image<Bgr, byte>(_capture.Width, _capture.Height);
             _capture.Retrieve(image);
@@ -250,7 +264,7 @@ namespace CameraCalibrationTool
             var grayImage = image.Convert<Gray, byte>();
             var found = CvInvoke.FindChessboardCorners(grayImage, new ImageSize(_nCornersHorizontal, _nCornersVertical), corners, CalibCbType.AdaptiveThresh | CalibCbType.FastCheck | CalibCbType.NormalizeImage);
             if (found)
-                CvInvoke.CornerSubPix(grayImage, corners, new ImageSize(11, 11), new ImageSize(-1, -1), new MCvTermCriteria(30, 0.1));
+                CvInvoke.CornerSubPix(grayImage, corners, new ImageSize(5, 5), new ImageSize(-1, -1), new MCvTermCriteria(30, 0.1));
             else
                 corners = new VectorOfPointF();
 

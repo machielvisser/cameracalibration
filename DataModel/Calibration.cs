@@ -12,6 +12,8 @@ namespace DataModel
     {
         public Mat CameraMatrix;
         public Mat DistortionCoefficients;
+        public Mat TranslationVectors;
+        public Mat RotationVectors;
 
         private Mat _inverseCameraMatrix;
         public Mat InverseCameraMatrix
@@ -32,6 +34,8 @@ namespace DataModel
         {
             CameraMatrix = new Mat(3, 3, DepthType.Cv64F, 1);
             DistortionCoefficients = new Mat(8, 1, DepthType.Cv64F, 1);
+            TranslationVectors = new Mat(3, 1, DepthType.Cv64F, 1);
+            RotationVectors = new Mat(3, 1, DepthType.Cv64F, 1);
         }
     }
 }
