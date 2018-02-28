@@ -13,5 +13,6 @@ namespace DataModel
     {
         public VectorOfPointF Corners;
         public Image<Bgr, byte> Image;
+        public bool Found;
     }
 }

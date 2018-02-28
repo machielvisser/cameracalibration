@@ -10,30 +10,47 @@
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="4*"></ColumnDefinition>
             <ColumnDefinition Width="4*"></ColumnDefinition>
-            <ColumnDefinition Width="100"></ColumnDefinition>
+            <ColumnDefinition Width="120"></ColumnDefinition>
         </Grid.ColumnDefinitions>
         <Grid.RowDefinitions>
+            <RowDefinition Height="25"></RowDefinition>
             <RowDefinition Height="*"></RowDefinition>
             <RowDefinition Height="5"></RowDefinition>
         </Grid.RowDefinitions>
+        <TextBox
+            Text="{Binding Source}"
+            Grid.ColumnSpan="2"/>
         <Image 
             Source="{Binding Step1}"  
-            Stretch="Uniform"/>
+            Stretch="Uniform"
+            Grid.Row="1"/>
         <Image 
             Source="{Binding Step2}"  
             Stretch="Uniform"
+            Grid.Row="1"
             Grid.Column="1"/>
         <Grid Grid.Column="2" Grid.Row="0" Grid.RowSpan="2" Margin="2">
             <Grid.RowDefinitions>
                 <RowDefinition Height="25"></RowDefinition>
                 <RowDefinition Height="25"></RowDefinition>
                 <RowDefinition Height="25"></RowDefinition>
+                <RowDefinition Height="25"></RowDefinition>
+                <RowDefinition Height="25"></RowDefinition>
+                <RowDefinition Height="25"></RowDefinition>
+                <RowDefinition Height="25"></RowDefinition>
+                <RowDefinition Height="25"></RowDefinition>
+                <RowDefinition Height="25"></RowDefinition>
             </Grid.RowDefinitions>
-            <Button Click="OpenButtonClick" Grid.Row="0" Height="20" VerticalAlignment="Top">Open</Button>
-            <Button Click="SaveButtonClick" Grid.Row="1" Height="20" VerticalAlignment="Top">Save</Button>
-            <TextBlock Grid.Row="2" Text="{Binding FaceAngle}"/>
+            <Button Click="StartButtonClick" Grid.Row="0" Height="20" VerticalAlignment="Top">Start</Button>
+            <Button Click="StopButtonClick" Grid.Row="1" Height="20" VerticalAlignment="Top">Stop</Button>
+            <Button Click="FindPatternButtonClick" Grid.Row="2" Height="20" VerticalAlignment="Top">Find Patterns</Button>
+            <Button Click="CalibrateIntrinsicButtonClick" Grid.Row="3" Height="20" VerticalAlignment="Top" IsEnabled="{Binding PatternsAvailable}">Calibrate Instrinsic</Button>
+            <Button Click="CalibrateExtrinsicButtonClick" Grid.Row="4" Height="20" VerticalAlignment="Top" IsEnabled="{Binding IntrinsicAvailable}">Calibrate Extrinsic</Button>
+            <Button Click="OpenCalibrationButtonClick" Grid.Row="5" Height="20" VerticalAlignment="Top">Open Calibration</Button>
+            <Button Click="SaveButtonClick" Grid.Row="6" Height="20" VerticalAlignment="Top" IsEnabled="{Binding CalibrationAvailable}">Save Calibration</Button>
+            <TextBlock Grid.Row="8" Text="{Binding FaceAngle}"/>
         </Grid>
-        <ProgressBar Minimum="0" Maximum="100" Value="{Binding PatternQuality}" Grid.Column="0" Grid.Row="1" />
-        <ProgressBar Minimum="0" Maximum="1" Value="{Binding CalibrationError}" Grid.Column="1" Grid.Row="1" Foreground="Red" />
+        <ProgressBar Minimum="0" Maximum="100" Value="{Binding PatternQuality}" Grid.Column="0" Grid.Row="2" />
+        <ProgressBar Minimum="0" Maximum="1" Value="{Binding CalibrationError, Mode=OneWay}" Grid.Column="1" Grid.Row="2" Foreground="Red" />
     </Grid>
 </Window>

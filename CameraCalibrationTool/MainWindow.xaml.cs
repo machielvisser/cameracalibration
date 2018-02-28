@@ -24,7 +24,32 @@ namespace CameraCalibrationTool
                 _viewModel.SaveCalibration(dialog.FileName);
         }
 
-        private void OpenButtonClick(object sender, RoutedEventArgs e)
+        private void StartButtonClick(object sender, RoutedEventArgs e)
+        {
+            _viewModel.Start();
+        }
+
+        private void StopButtonClick(object sender, RoutedEventArgs e)
+        {
+            _viewModel.Stop();
+        }
+
+        private void FindPatternButtonClick(object sender, RoutedEventArgs e)
+        {
+            _viewModel.FindPatterns();
+        }
+
+        private void CalibrateIntrinsicButtonClick(object sender, RoutedEventArgs e)
+        {
+            _viewModel.CalibrateIntrinsic();
+        }
+
+        private void CalibrateExtrinsicButtonClick(object sender, RoutedEventArgs e)
+        {
+            _viewModel.CalibrateExtrinsic();
+        }
+
+        private void OpenCalibrationButtonClick(object sender, RoutedEventArgs e)
         {
             var dialog = new OpenFileDialog();
             if (dialog.ShowDialog() ?? false)
