@@ -1,4 +1,5 @@
-﻿using Emgu.CV;
+﻿using DataModel;
+using Emgu.CV;
 using Emgu.CV.CvEnum;
 using Emgu.CV.Structure;
 using Shared;
@@ -7,11 +8,13 @@ using System.Collections.Generic;
 using System.Configuration;
 using System.Drawing;
 using System.Linq;
+using System.Reactive.Subjects;
+using System.Threading.Tasks;
 using ImageSize = System.Drawing.Size;
 
 namespace FaceTracking
 {
-    public class FaceTracker
+    public class FaceTracker : IDisposable
     {
         private List<FaceTrack> _tracks = new List<FaceTrack>();
         private Rectangle _imageSize;
@@ -22,36 +25,49 @@ namespace FaceTracking
         private int _minNeighbours = int.Parse(ConfigurationManager.AppSettings["MinNeighbours"]);
         private int _minFaceSize = int.Parse(ConfigurationManager.AppSettings["MinFaceSize"]);
 
-        public List<Rectangle> Faces
-        {
-            get
-            {
-                return _tracks
-                    .Select(t => t.Location.Scale(1 / _processingScale).Intersection(_imageSize))
-                    .ToList();
-            }
-        }
-
         public FaceTracker()
         {
             _haarCascade = new CascadeClassifier(ConfigurationManager.AppSettings["Model"]);
         }
 
-        public FaceTracker Update(Image<Bgr, byte> image)
+        public DetectionResult Update(Frame<Bgr, byte> frame)
         {
-            _imageSize = image.ROI;
+            _imageSize = frame.Image.ROI;
+            var minFaceSize = (int)(_minFaceSize * _processingScale);
 
-            var pre = image.SmoothMedian(5).Resize(_processingScale, Inter.Linear);
+            var pre = frame.Image.Resize(_processingScale, Inter.Linear);
 
+            // Update tracks
             _tracks.ForEach(s => s.Update(pre));
+
+            // Remove stopped tracks
             _tracks.RemoveAll(t => !t.Active);
+
+            // Add new tracks
             _tracks.AddRange(_haarCascade
-                .DetectMultiScale(image.Convert<Gray, byte>().SmoothMedian(7), _scaleFactor, _minNeighbours, new ImageSize(_minFaceSize, _minFaceSize))
-                .Select(d => d.Scale(_processingScale))
+                .DetectMultiScale(pre, _scaleFactor, _minNeighbours, new ImageSize(minFaceSize, minFaceSize))
                 .Where(d => !_tracks.Any(s => s.Location.IntersectsWith(d)))
                 .Select(d => new FaceTrack(pre, d)));
 
-            return this;
+            // Annotate frame
+            var annotated = pre.Copy();
+            _tracks.Select(t => t.Location).ToList().ForEach(d => annotated.Draw(d, new Bgr(Color.Red), 2));
+            var detections = _tracks
+                    .Select(t => t.Location.Scale(1 / _processingScale).Intersection(_imageSize))
+                    .ToList();
+
+            return new DetectionResult
+            {
+                Frame = frame,
+                Annotated = annotated,
+                Detections = detections,
+                Face = detections.Any() ? frame.Image.GetSubRect(detections.First()) : null
+            };
+        }
+
+        public void Dispose()
+        {
+
         }
     }
 }

@@ -55,7 +55,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Calibration.cs" />
-    <Compile Include="Detection.cs" />
+    <Compile Include="DetectionResult.cs" />
     <Compile Include="Frame.cs" />
     <Compile Include="Pattern.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

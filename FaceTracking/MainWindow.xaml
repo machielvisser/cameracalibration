@@ -13,6 +13,7 @@
         </Grid.ColumnDefinitions>
         <Grid.RowDefinitions>
             <RowDefinition Height="*"></RowDefinition>
+            <RowDefinition Height="20"></RowDefinition>
         </Grid.RowDefinitions>
         <Image 
             Source="{Binding Image}"  
@@ -23,5 +24,7 @@
             Stretch="Uniform"
             Grid.Row="0"
             Grid.Column="1"/>
+        <TextBlock Text="{Binding Delay}" Grid.Row="1" />
+        <TextBlock Text="{Binding Rate}" Grid.Row="1" Grid.Column="1"/>
     </Grid>
 </Window>

@@ -2,19 +2,15 @@
 using Emgu.CV;
 using Emgu.CV.CvEnum;
 using Emgu.CV.Structure;
-using Emgu.CV.Tracking;
+using Emgu.CV.Util;
 using Shared;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Configuration;
-using System.Diagnostics;
-using System.Drawing;
 using System.Linq;
+using System.Reactive.Concurrency;
 using System.Reactive.Linq;
-using System.Reactive.Subjects;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media;
 
@@ -25,19 +21,44 @@ namespace FaceTracking
     {
         public event PropertyChangedEventHandler PropertyChanged;
 
-        private VideoCapture _capture;
-
         public ImageSource Image { get; set; }
         public ImageSource Face { get; set; }
 
+        private string _delay;
+        public string Delay
+        {
+            get
+            {
+                return _delay;
+            }
+            set
+            {
+                _delay = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Delay)));
+            }
+        }
+
+        private string _rate;
+        public string Rate
+        {
+            get
+            {
+                return _rate;
+            }
+            set
+            {
+                _rate = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Rate)));
+            }
+        }
+
+        private List<IDisposable> _disposables = new List<IDisposable>();
+
         public FaceTrackingViewModel()
         {
-            var frameInterval = 1000 / float.Parse(ConfigurationManager.AppSettings["FrameRate"]);
+            var frameInterval = int.Parse(ConfigurationManager.AppSettings["FrameInterval"]);
 
-            _capture = new VideoCapture(0);
-
-            var size = new Rectangle(0, 0, _capture.Width, _capture.Height);
-
+            // Update GUI
             Observable
                 .Interval(TimeSpan.FromMilliseconds(frameInterval))
                 .Subscribe(_ => {
@@ -45,38 +66,80 @@ namespace FaceTracking
                     PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Face)));
                 });
 
+            // Read frames
             var frames = Observable
-                .FromEventPattern<EventHandler, EventArgs>(
-                    h => _capture.ImageGrabbed += h,
-                    h => _capture.ImageGrabbed -= h)
-                .Select(_ =>
+                .Using(
+                    () => new Capture("rtsp://admin:admin@10.15.8.67:554/media/video1", true),
+                    capture => Observable
+                        .FromEventPattern<EventHandler, EventArgs>(
+                            h => capture.ImageGrabbed += h,
+                            h => capture.ImageGrabbed -= h)
+                        .Sample(TimeSpan.FromMilliseconds(frameInterval))
+                        .Sample(TimeSpan.Zero, NewThreadScheduler.Default)
+                        .Select(_ => GrabImage(capture))
+                        .Where(f => f != null))
+                .Catch(Observable.Empty<Frame<Bgr, byte>>())
+                .Publish();
+
+            // Track faces
+            var detections = Observable
+                .Using(
+                    () => new FaceTracker(),
+                    tracker => frames
+                        .Sample(TimeSpan.FromMilliseconds(frameInterval))
+                        .Sample(TimeSpan.Zero, NewThreadScheduler.Default)
+                        .Select(tracker.Update))
+                .Publish();
+
+            // Show delay
+            detections
+                .Subscribe(x => Application.Current?.Dispatcher.Invoke(() => Delay = $"{DateTime.UtcNow.Subtract(x.Frame.Timestamp).TotalMilliseconds:N0}"));
+
+            // Show 
+            detections
+                .Buffer(TimeSpan.FromSeconds(1))
+                .Select(b => b.Count)
+                .Subscribe(c => Application.Current?.Dispatcher.Invoke(() => Rate = $"{c}"));
+
+            // Show detections
+            detections
+                .Subscribe(x => Application.Current?.Dispatcher.Invoke(() => Image = x.Annotated.ToImageSource()));
+
+            // Show one detection enlarged
+            detections
+                .Where(x => x.Face != null)
+                .Subscribe(i => Application.Current?.Dispatcher.Invoke(() => Face = i.Face.ToImageSource()));
+
+            _disposables.Add(frames.Connect());
+            _disposables.Add(detections.Connect());
+        }
+
+        private Frame<Bgr, byte> GrabImage(VideoCapture capture)
+        {
+            try
+            {
+                var temp = new Image<Bgr, byte>(capture.Width, capture.Height);
+
+                var frame = new Frame<Bgr, byte>()
                 {
-                    var image = new Image<Bgr, byte>(_capture.Width, _capture.Height);
-                    _capture.Retrieve(image);
-                    return new Frame<Bgr, byte> { Image = image, Timestamp = DateTime.UtcNow };
-                })
-                .Publish();
+                    Timestamp = DateTime.UtcNow
+                };
 
-            var detections = frames
-                .Select(f => f.Image.Copy())
-                .Scan(new FaceTracker(), (t, f) => t.Update(f))
-                .Select(t => t.Faces)
-                .Publish();
+                if (capture.Retrieve(temp) && temp.CountNonzero()[0] != 0)
+                {
+                    frame.Image = temp.Copy();
+                        
+                    return frame;
+                }
 
-            detections
-                .Zip(frames, (d, f) => new { Detections = d, Image = f.Image.Copy() })
-                .Do(x => x.Detections.ToList().ForEach(d => x.Image.Draw(d, new Bgr(System.Drawing.Color.Red), 2)))
-                .Subscribe(x => Application.Current?.Dispatcher.Invoke(() => Image = x.Image.ToImageSource()));
+                temp.Dispose();
+            }
+            catch (CvException)
+            {
 
-            detections
-                .Zip(frames, (d, f) => new { Detections = d, Image = f.Image, Timestamp = f.Timestamp })
-                .Where(x => x.Detections.Any())
-                .Select(x => x.Image.GetSubRect(x.Detections.First()))
-                .Subscribe(i => Application.Current?.Dispatcher.Invoke(() => Face = i.ToImageSource()));
+            }
 
-            frames.Connect();
-            detections.Connect();
-            _capture.Start();
+            return null;
         }
     }
 }

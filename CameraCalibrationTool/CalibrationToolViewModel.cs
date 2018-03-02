@@ -30,9 +30,9 @@ namespace CameraCalibrationTool
 
         private const int _frameInterval = 50;
 
-        private const int _numberOfPatterns = 1;
+        private const int _numberOfPatterns = 30;
 
-        private MCvPoint3D32f _calibrationPatternLocation;
+        private MCvPoint3D32f _realLocation;
 
         private string _source = "rtsp://admin:admin@10.15.8.67:554/media/video1";
         public string Source
@@ -177,7 +177,7 @@ namespace CameraCalibrationTool
 
         public CalibrationToolViewModel()
         {
-            _calibrationPatternLocation = new MCvPoint3D32f
+            _realLocation = new MCvPoint3D32f
             {
                 X = 0.424f,
                 Y = 0,
@@ -185,7 +185,7 @@ namespace CameraCalibrationTool
             };
 
             Observable
-                .Interval(TimeSpan.FromMilliseconds(_frameInterval))
+                .Interval(TimeSpan.FromMilliseconds(50))
                 .Subscribe(_ => {
                     PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Step1)));
                     PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Step2)));
@@ -340,7 +340,7 @@ namespace CameraCalibrationTool
 
         public void CalibrateExtrinsic()
         {
-            var p = _calibrationPatternLocation;
+            var p = _realLocation;
 
             var pattern = PatternsSet.First();
 
@@ -348,7 +348,7 @@ namespace CameraCalibrationTool
                 .Range(0, _nCornersVertical)
                 .SelectMany(z => Observable
                     .Range(0, _nCornersHorizontal)
-                    .Select(x => new MCvPoint3D32f(p.X + x * _squareSize, p.Y, p.Z - z * _squareSize))
+                    .Select(x => new MCvPoint3D32f(p.X + x * _squareSize, p.Y, p.Z + z * _squareSize))
                     .ToArray())
                 .Aggregate((x, y) => x.Concat(y).ToArray())
                 .Wait();
