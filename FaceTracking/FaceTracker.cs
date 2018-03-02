@@ -51,7 +51,7 @@ namespace FaceTracking
 
             // Annotate frame
             var annotated = pre.Copy();
-            _tracks.Select(t => t.Location).ToList().ForEach(d => annotated.Draw(d, new Bgr(Color.Red), 2));
+            _tracks.ToList().ForEach(t => annotated.Draw(t.Location, t.New ? new Bgr(Color.Green) : new Bgr(Color.Red), 2));
             var detections = _tracks
                     .Select(t => t.Location.Scale(1 / _processingScale).Intersection(_imageSize))
                     .ToList();

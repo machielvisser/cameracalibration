@@ -14,5 +14,6 @@ namespace DataModel
     {
         public Image<TColor, TDepth> Image { get; set; }
         public DateTime Timestamp { get; set; }
+        public double Position { get; set; }
     }
 }

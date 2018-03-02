@@ -8,6 +8,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Configuration;
+using System.Diagnostics;
 using System.Linq;
 using System.Reactive.Concurrency;
 using System.Reactive.Linq;
@@ -61,6 +62,7 @@ namespace FaceTracking
             // Update GUI
             Observable
                 .Interval(TimeSpan.FromMilliseconds(frameInterval))
+                .Do(_ => GC.Collect()) // Regular collection is required given the amount of data involved with the frames
                 .Subscribe(_ => {
                     PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Image)));
                     PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Face)));
@@ -74,10 +76,10 @@ namespace FaceTracking
                         .FromEventPattern<EventHandler, EventArgs>(
                             h => capture.ImageGrabbed += h,
                             h => capture.ImageGrabbed -= h)
-                        .Sample(TimeSpan.FromMilliseconds(frameInterval))
-                        .Sample(TimeSpan.Zero, NewThreadScheduler.Default)
+                        .Sample(TimeSpan.FromMilliseconds(1 / capture.GetCaptureProperty(CapProp.Fps)))
+                        .Sample(TimeSpan.Zero, NewThreadScheduler.Default) // Skip until previous is processed
                         .Select(_ => GrabImage(capture))
-                        .Where(f => f != null))
+                        .Where(f => f.Image != null))
                 .Catch(Observable.Empty<Frame<Bgr, byte>>())
                 .Publish();
 
@@ -87,7 +89,7 @@ namespace FaceTracking
                     () => new FaceTracker(),
                     tracker => frames
                         .Sample(TimeSpan.FromMilliseconds(frameInterval))
-                        .Sample(TimeSpan.Zero, NewThreadScheduler.Default)
+                        .Sample(TimeSpan.Zero, NewThreadScheduler.Default) // Skip until previous is processed
                         .Select(tracker.Update))
                 .Publish();
 
@@ -95,7 +97,7 @@ namespace FaceTracking
             detections
                 .Subscribe(x => Application.Current?.Dispatcher.Invoke(() => Delay = $"{DateTime.UtcNow.Subtract(x.Frame.Timestamp).TotalMilliseconds:N0}"));
 
-            // Show 
+            // Show frame rate
             detections
                 .Buffer(TimeSpan.FromSeconds(1))
                 .Select(b => b.Count)
@@ -114,32 +116,34 @@ namespace FaceTracking
             _disposables.Add(detections.Connect());
         }
 
+        private double last = 0;
+
         private Frame<Bgr, byte> GrabImage(VideoCapture capture)
         {
-            try
+            var temp = new Image<Bgr, byte>(capture.Width, capture.Height);
+
+            var frame = new Frame<Bgr, byte>()
             {
-                var temp = new Image<Bgr, byte>(capture.Width, capture.Height);
+                Timestamp = DateTime.UtcNow,
+                Position = capture.GetCaptureProperty(CapProp.PosMsec)
+            };
 
-                var frame = new Frame<Bgr, byte>()
-                {
-                    Timestamp = DateTime.UtcNow
-                };
+            var offset = frame.Position - last;
+            Debug.WriteLine(offset);
 
-                if (capture.Retrieve(temp) && temp.CountNonzero()[0] != 0)
-                {
-                    frame.Image = temp.Copy();
-                        
-                    return frame;
-                }
+            if (offset != 0 && capture.Retrieve(temp) && temp.CountNonzero()[0] != 0)
+                frame.Image = temp.Copy();
 
-                temp.Dispose();
-            }
-            catch (CvException)
-            {
+            last = frame.Position;
 
-            }
+            temp.Dispose();
 
-            return null;
+            return frame;
+        }
+
+        ~FaceTrackingViewModel()
+        {
+            _disposables.ForEach(d => d.Dispose());
         }
     }
 }
