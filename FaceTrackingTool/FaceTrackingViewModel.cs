@@ -3,6 +3,7 @@ using Emgu.CV;
 using Emgu.CV.CvEnum;
 using Emgu.CV.Structure;
 using Emgu.CV.Util;
+using FaceTracking;
 using Shared;
 using System;
 using System.Collections.Generic;
@@ -15,7 +16,7 @@ using System.Reactive.Linq;
 using System.Windows;
 using System.Windows.Media;
 
-namespace FaceTracking
+namespace FaceTrackingTool
 {
 
     public class FaceTrackingViewModel : INotifyPropertyChanged
@@ -71,13 +72,14 @@ namespace FaceTracking
             // Read frames
             var frames = Observable
                 .Using(
-                    () => new Capture("rtsp://admin:admin@10.15.8.67:554/media/video1", true),
+                    //() => new Capture("rtsp://admin:admin@10.15.8.67:554/media/video1", true),
+                    () => new Capture("http://root:Scarabee01@10.15.8.125/axis-cgi/mjpg/video.cgi", true),
                     capture => Observable
                         .FromEventPattern<EventHandler, EventArgs>(
                             h => capture.ImageGrabbed += h,
                             h => capture.ImageGrabbed -= h)
-                        .Sample(TimeSpan.FromMilliseconds(1 / capture.GetCaptureProperty(CapProp.Fps)))
-                        .Sample(TimeSpan.Zero, NewThreadScheduler.Default) // Skip until previous is processed
+                        //.Sample(TimeSpan.FromMilliseconds(1000 / capture.GetCaptureProperty(CapProp.Fps)))
+                        //.Sample(TimeSpan.Zero, NewThreadScheduler.Default) // Skip until previous is processed
                         .Select(_ => GrabImage(capture))
                         .Where(f => f.Image != null))
                 .Catch(Observable.Empty<Frame<Bgr, byte>>())
@@ -88,8 +90,8 @@ namespace FaceTracking
                 .Using(
                     () => new FaceTracker(),
                     tracker => frames
-                        .Sample(TimeSpan.FromMilliseconds(frameInterval))
-                        .Sample(TimeSpan.Zero, NewThreadScheduler.Default) // Skip until previous is processed
+                        //.Sample(TimeSpan.FromMilliseconds(frameInterval))
+                        //.Sample(TimeSpan.Zero, NewThreadScheduler.Default) // Skip until previous is processed
                         .Select(tracker.Update))
                 .Publish();
 
@@ -129,7 +131,7 @@ namespace FaceTracking
             };
 
             var offset = frame.Position - last;
-            Debug.WriteLine(offset);
+            //Debug.WriteLine(offset);
 
             if (offset != 0 && capture.Retrieve(temp) && temp.CountNonzero()[0] != 0)
                 frame.Image = temp.Copy();
